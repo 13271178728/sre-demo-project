@@ -1,5 +1,13 @@
 // Jenkinsfile.ssh-test
-pipeline {
+pipeline 
+
+   environment {
+        // 临时跳过 SSH 主机密钥验证（仅测试用）
+        GIT_SSH_COMMAND = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    }
+
+
+{
     agent any
     
     stages {
