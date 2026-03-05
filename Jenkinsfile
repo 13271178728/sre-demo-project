@@ -37,7 +37,7 @@ pipeline {
 auth_url = "http://10.1.1.180:5000/v3"
 tenant_name = "admin"
 user_name = "admin"
-password = "你的密码"
+password = "jiaxun@123"
 region = "RegionOne"
 image_name = "ceos-arrch"
 flavor_name = "flavor1"
