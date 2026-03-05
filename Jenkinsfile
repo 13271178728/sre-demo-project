@@ -1,4 +1,3 @@
-// Jenkinsfile.quickstart
 pipeline {
     agent any
 
