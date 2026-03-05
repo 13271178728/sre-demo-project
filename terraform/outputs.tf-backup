@@ -1,0 +1,51 @@
+# terraform/outputs.tf
+
+output "instance_id" {
+  description = "创建的虚拟机 ID"
+  value       = openstack_compute_instance_v2.sre_vm.id
+}
+
+output "instance_name" {
+  description = "创建的虚拟机名称"
+  value       = openstack_compute_instance_v2.sre_vm.name
+}
+
+output "instance_ip" {
+  description = "虚拟机的私有 IP 地址"
+  value       = openstack_compute_instance_v2.sre_vm.access_ip_v4
+}
+
+output "floating_ip" {
+  description = "虚拟机的浮动 IP 地址"
+  value       = openstack_networking_floatingip_v2.sre_fip.address
+}
+
+output "security_group_id" {
+  description = "创建的安全组 ID"
+  value       = openstack_compute_secgroup_v2.sre_secgroup.id
+}
+
+output "ssh_connection" {
+  description = "SSH 连接命令"
+  value       = "ssh -i ${var.key_pair_name}.pem ubuntu@${openstack_networking_floatingip_v2.sre_fip.address}"
+}
+
+output "health_check_url" {
+  description = "健康检查 URL"
+  value       = "http://${openstack_networking_floatingip_v2.sre_fip.address}/health"
+}
+
+output "node_exporter_url" {
+  description = "Node Exporter 监控 URL"
+  value       = "http://${openstack_networking_floatingip_v2.sre_fip.address}:9100/metrics"
+}
+
+output "build_info" {
+  description = "构建信息"
+  value = {
+    build_id     = var.build_id
+    environment  = var.app_env
+    created_at   = timestamp()
+    region       = var.region
+  }
+}
