@@ -1,4 +1,4 @@
-// Jenkinsfile.fixed
+// Jenkinsfile.debug
 pipeline {
     agent any
     
@@ -18,62 +18,79 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // 使用简单的 git 命令，和成功的测试一样
                 sh '''
-                    echo "=== 克隆代码 ==="
-                    rm -rf sre-demo-project || true
+                    echo "=== 详细目录调试 ==="
+                    
+                    # 1. 显示当前目录
+                    echo "1. 当前目录: $(pwd)"
+                    
+                    # 2. 清理旧目录
+                    echo "2. 清理旧目录"
+                    rm -rf sre-demo-project
+                    
+                    # 3. 克隆代码
+                    echo "3. 克隆代码"
                     git clone git@github.com:13271178728/sre-demo-project.git sre-demo-project
+                    
+                    # 4. 查看克隆结果
+                    echo "4. 克隆结果:"
+                    ls -la sre-demo-project/
+                    
+                    # 5. 进入项目目录
+                    echo "5. 进入项目目录"
                     cd sre-demo-project
-                    git checkout main
-                    echo "=== 克隆完成 ==="
+                    
+                    # 6. 查看当前分支
+                    echo "6. 当前分支:"
+                    git branch
+                    
+                    # 7. 查看所有文件
+                    echo "7. 项目文件列表:"
                     ls -la
+                    
+                    # 8. 特别检查 terraform 目录
+                    echo "8. terraform 目录内容:"
+                    if [ -d "terraform" ]; then
+                        ls -la terraform/
+                        echo "✅ terraform 目录存在"
+                    else
+                        echo "❌ terraform 目录不存在"
+                    fi
                 '''
             }
         }
         
-        stage('Check Terraform Files') {
+        stage('Check Files') {
             steps {
-                dir('sre-demo-project/terraform') {
-                    sh '''
-                        echo "=== 检查 Terraform 文件 ==="
-                        ls -la
-                        if [ ! -f main.tf ]; then
-                            echo "❌ main.tf 不存在"
-                            exit 1
-                        fi
-                        echo "✅ 所有文件存在"
-                    '''
+                script {
+                    // 检查必要文件
+                    def filesToCheck = [
+                        'sre-demo-project/terraform/main.tf',
+                        'sre-demo-project/terraform/variables.tf',
+                        'sre-demo-project/terraform/outputs.tf'
+                    ]
+                    
+                    for (file in filesToCheck) {
+                        if (fileExists(file)) {
+                            echo "✅ ${file} 存在"
+                        } else {
+                            echo "❌ ${file} 不存在"
+                        }
+                    }
                 }
             }
         }
         
+        // 如果文件存在，再继续
         stage('Terraform Init') {
+            when {
+                expression { fileExists('sre-demo-project/terraform/main.tf') }
+            }
             steps {
                 dir('sre-demo-project/terraform') {
                     sh 'terraform init'
                 }
             }
-        }
-        
-        stage('Terraform Plan') {
-            steps {
-                dir('sre-demo-project/terraform') {
-                    sh """
-                        terraform plan \
-                            -var "build_id=${BUILD_ID}" \
-                            -var "app_env=${ENVIRONMENT}"
-                    """
-                }
-            }
-        }
-    }
-    
-    post {
-        success {
-            echo "✅ 构建成功"
-        }
-        failure {
-            echo "❌ 构建失败"
         }
     }
 }
