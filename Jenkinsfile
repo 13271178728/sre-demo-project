@@ -1,4 +1,4 @@
-// Jenkinsfile.apply - 修复版
+// Jenkinsfile.debug-apply
 pipeline {
     agent any
     
@@ -25,23 +25,103 @@ pipeline {
             steps {
                 git branch: 'main',
                     url: 'git@github.com:13271178728/sre-demo-project.git'
+                
+                sh '''
+                    echo "=== 克隆完成 ==="
+                    ls -la
+                '''
+            }
+        }
+        
+        stage('Debug Credentials') {
+            steps {
+                script {
+                    // 检查是否有凭证
+                    def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
+                        com.cloudbees.plugins.credentials.common.StandardCredentials,
+                        jenkins.model.Jenkins.instance,
+                        null,
+                        null
+                    )
+                    
+                    echo "=== 可用凭证列表 ==="
+                    creds.each { cred ->
+                        echo "ID: ${cred.id}, Type: ${cred.class.simpleName}"
+                    }
+                }
             }
         }
         
         stage('Prepare Terraform Variables') {
             steps {
                 dir('terraform') {
-                    withCredentials([file(credentialsId: 'terraform-tfvars', variable: 'TFVARS_FILE')]) {
-                        sh '''
-                            echo "=== 准备 Terraform 变量文件 ==="
-                            cp ${TFVARS_FILE} terraform.tfvars
-                            chmod 600 terraform.tfvars
-                            echo "✅ 变量文件已准备"
-                            
-                            echo "=== 变量文件内容（隐藏密码）==="
-                            cat terraform.tfvars | grep -v password
-                        '''
+                    script {
+                        try {
+                            withCredentials([file(credentialsId: 'terraform-tfvars', variable: 'TFVARS_FILE')]) {
+                                sh '''
+                                    echo "=== 开始准备变量文件 ==="
+                                    echo "TFVARS_FILE: ${TFVARS_FILE}"
+                                    
+                                    echo "=== 检查源文件 ==="
+                                    ls -la ${TFVARS_FILE} || echo "源文件不存在"
+                                    
+                                    echo "=== 复制文件 ==="
+                                    cp -v ${TFVARS_FILE} terraform.tfvars
+                                    
+                                    echo "=== 设置权限 ==="
+                                    chmod 600 terraform.tfvars
+                                    
+                                    echo "=== 验证文件 ==="
+                                    ls -la terraform.tfvars
+                                    
+                                    echo "=== 文件内容（不含密码）==="
+                                    cat terraform.tfvars | grep -v -E 'password|token|key'
+                                    
+                                    echo "✅ 变量文件准备完成"
+                                '''
+                            }
+                        } catch (Exception e) {
+                            echo "❌ 准备变量文件失败: ${e.message}"
+                            // 创建临时变量文件用于测试
+                            sh '''
+                                echo "=== 创建临时变量文件用于测试 ==="
+                                cat > terraform.tfvars << 'EOF'
+auth_url = "http://10.1.1.180:5000/v3"
+tenant_name = "demo"
+user_name = "demo"
+password = "demo"
+region = "RegionOne"
+image_name = "ubuntu-22.04"
+flavor_name = "m1.small"
+key_pair_name = "sre-demo-key"
+network_name = "private-network"
+EOF
+                                echo "✅ 已创建临时变量文件"
+                                cat terraform.tfvars | grep -v password
+                            '''
+                        }
                     }
+                }
+            }
+        }
+        
+        stage('Check Terraform Files') {
+            steps {
+                dir('terraform') {
+                    sh '''
+                        echo "=== 检查 Terraform 文件 ==="
+                        ls -la
+                        
+                        echo "=== main.tf 内容预览 ==="
+                        head -30 main.tf
+                        
+                        echo "=== terraform.tfvars 存在性 ==="
+                        if [ -f terraform.tfvars ]; then
+                            echo "✅ terraform.tfvars 存在"
+                        else
+                            echo "❌ terraform.tfvars 不存在"
+                        fi
+                    '''
                 }
             }
         }
@@ -112,37 +192,6 @@ pipeline {
                 }
             }
         }
-        
-        stage('Verify VM') {
-            when {
-                expression { params.ACTION == 'apply' }
-            }
-            steps {
-                script {
-                    def vmIp = readFile('vm_ip.txt').trim()
-                    sh """
-                        echo "=== 验证虚拟机 ==="
-                        echo "虚拟机 IP: ${vmIp}"
-                        
-                        # 等待 SSH 就绪（最多等待 2 分钟）
-                        echo "等待 SSH 服务启动..."
-                        timeout 120 bash -c '
-                            while ! nc -zv ${vmIp} 22; do
-                                echo "  等待中..."
-                                sleep 5
-                            done
-                        ' && echo "✅ SSH 已就绪" || echo "⚠️ SSH 未就绪"
-                        
-                        # 尝试连接并查看欢迎信息
-                        ssh -o StrictHostKeyChecking=no \
-                            -o ConnectTimeout=5 \
-                            -i ~/.ssh/id_rsa \
-                            ubuntu@${vmIp} \
-                            'cat /tmp/welcome.txt' || echo "⚠️ 无法查看欢迎文件"
-                    """
-                }
-            }
-        }
     }
     
     post {
@@ -150,26 +199,28 @@ pipeline {
             echo "=== 构建完成 ==="
             echo "操作: ${params.ACTION}"
             echo "结果: ${currentBuild.result ?: 'SUCCESS'}"
+            
+            // 收集日志文件
+            archiveArtifacts artifacts: 'terraform/*.log', allowEmptyArchive: true
         }
         success {
             script {
-                // 注意：这里要用 script 块包裹
                 if (params.ACTION == 'apply') {
                     def vmIp = readFile('vm_ip.txt').trim()
                     echo "✅ 虚拟机创建成功！IP: ${vmIp}"
                 } else if (params.ACTION == 'destroy') {
                     echo "✅ 资源已销毁"
                 } else if (params.ACTION == 'plan') {
-                    echo "✅ Plan 执行成功，可以执行 apply"
+                    echo "✅ Plan 执行成功"
                 }
             }
         }
         failure {
-            echo "❌ 操作失败，请查看日志"
+            echo "❌ 操作失败"
             script {
-                if (params.ACTION == 'apply') {
-                    echo "⚠️ 虚拟机创建失败，可能需要手动清理资源"
-                }
+                // 显示最后 50 行日志
+                def log = currentBuild.rawBuild.getLog(50).join('\n')
+                echo "最后 50 行日志:\n${log}"
             }
         }
     }
