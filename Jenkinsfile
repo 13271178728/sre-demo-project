@@ -1,4 +1,3 @@
-// Jenkinsfile.test
 pipeline {
     agent any
     
@@ -6,16 +5,28 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'ls -la'
             }
         }
         
-        stage('Test Only') {
+        stage('Check Tools') {
             steps {
                 sh '''
-                    echo "Testing only this stage"
-                    # 先不运行实际命令
+                    echo "=== 检查必要工具 ==="
+                    python3 --version
+                    pytest --version || echo "pytest not installed"
+                    terraform version || echo "terraform not installed"
                 '''
+            }
+        }
+        
+        stage('Terraform Init') {
+            steps {
+                dir('terraform') {
+                    sh '''
+                        echo "=== 尝试初始化 ==="
+                        terraform init || echo "terraform init failed"
+                    '''
+                }
             }
         }
     }
