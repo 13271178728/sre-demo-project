@@ -1,33 +1,23 @@
-stage('SSH Debug') {
-    steps {
-        sshagent(['github-ssh-key']) {
-            sh '''
-                echo "=== SSH Debug Info ==="
-                echo "SSH Agent 状态:"
-                ssh-add -l || echo "No keys in agent"
-                
-                echo "SSH 连接测试:"
-                ssh -T git@github.com || true
-                
-                echo "当前用户: $(whoami)"
-                echo "HOME 目录: $HOME"
-                ls -la $HOME/.ssh/ || echo "No .ssh directory"
-            '''
-        }
+pipeline {
+    agent any
+    
+    environment {
+        // 临时跳过 SSH 主机密钥验证（仅测试用）
+        GIT_SSH_COMMAND = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     }
-}
-
-stage('Checkout') {
-    steps {
-        sshagent(['github-ssh-key']) {
-            checkout([
-                $class: 'GitSCM',
-                branches: [[name: '*/main']],
-                userRemoteConfigs: [[
-                    url: 'git@github.com:13271178728/sre-demo-project.git',
-                    credentialsId: 'github-ssh-key'
-                ]]
-            ])
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'git@github.com:13271178728/sre-demo-project.git',
+                        credentialsId: 'github-ssh-key'
+                    ]]
+                ])
+            }
         }
     }
 }
