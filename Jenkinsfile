@@ -1,4 +1,4 @@
-// Jenkinsfile.apply
+// Jenkinsfile.apply - 修复版
 pipeline {
     agent any
     
@@ -152,17 +152,25 @@ pipeline {
             echo "结果: ${currentBuild.result ?: 'SUCCESS'}"
         }
         success {
-            if (params.ACTION == 'apply') {
-                script {
+            script {
+                // 注意：这里要用 script 块包裹
+                if (params.ACTION == 'apply') {
                     def vmIp = readFile('vm_ip.txt').trim()
                     echo "✅ 虚拟机创建成功！IP: ${vmIp}"
+                } else if (params.ACTION == 'destroy') {
+                    echo "✅ 资源已销毁"
+                } else if (params.ACTION == 'plan') {
+                    echo "✅ Plan 执行成功，可以执行 apply"
                 }
-            } else if (params.ACTION == 'destroy') {
-                echo "✅ 资源已销毁"
             }
         }
         failure {
             echo "❌ 操作失败，请查看日志"
+            script {
+                if (params.ACTION == 'apply') {
+                    echo "⚠️ 虚拟机创建失败，可能需要手动清理资源"
+                }
+            }
         }
     }
 }
